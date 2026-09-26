@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(Tutti
-    VERSION 2.0.0
+    VERSION 2.1.0
     DESCRIPTION "A modern C++23 thread pool"
     HOMEPAGE_URL "https://github.com/dqsjqian/Tutti"
     LANGUAGES CXX)
