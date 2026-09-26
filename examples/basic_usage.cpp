@@ -1,9 +1,9 @@
-// Mira - basic usage example.
+// Tutti - basic usage example.
 //
 // Copyright (c) 2026 dqsjqian
 // SPDX-License-Identifier: MIT
 
-#include <mira/thread_pool.hpp>
+#include <tutti/thread_pool.hpp>
 
 #include <atomic>
 #include <cstddef>
@@ -29,11 +29,11 @@ struct Counter {
 int main() {
     // std::print/std::println are C++23 and replace the printf calls a C++20
     // example would have needed.
-    std::println("Mira {} built for C++ standard {}", mira::version_major, mira::cpp_standard);
+    std::println("Tutti {} built for C++ standard {}", tutti::version_major, tutti::cpp_standard);
 
-    // A pool with four workers. Use mira::ThreadPool pool; to size the pool from
+    // A pool with four workers. Use tutti::ThreadPool pool; to size the pool from
     // std::thread::hardware_concurrency().
-    mira::ThreadPool pool(4);
+    tutti::ThreadPool pool(4);
 
     // A task that returns a value.
     auto answer = pool.submit([] { return 42; });
@@ -63,7 +63,7 @@ int main() {
     }
 
     // std::expected: report a refusal instead of throwing.
-    std::expected<std::future<int>, mira::PoolError> accepted = pool.try_submit([] { return 3; });
+    std::expected<std::future<int>, tutti::PoolError> accepted = pool.try_submit([] { return 3; });
     if (accepted) {
         std::println("try_submit       = {}", accepted->get());
     } else {
@@ -95,19 +95,19 @@ int main() {
     std::println("all tasks done, {} workers idle", pool.idle_count());
 
     // Backpressure: a bounded queue refuses work instead of growing forever.
-    mira::ThreadPool bounded(mira::ThreadPool::Options{.thread_count = 1, .max_pending = 1});
+    tutti::ThreadPool bounded(tutti::ThreadPool::Options{.thread_count = 1, .max_pending = 1});
     bounded.pause();
-    const std::expected<std::future<void>, mira::PoolError> queued = bounded.try_submit([] {});
-    const std::expected<std::future<void>, mira::PoolError> refused = bounded.try_submit([] {});
+    const std::expected<std::future<void>, tutti::PoolError> queued = bounded.try_submit([] {});
+    const std::expected<std::future<void>, tutti::PoolError> refused = bounded.try_submit([] {});
     std::println("bounded queue    = accepted={} second={}", queued.has_value(), refused.error());
     bounded.resume();
 
     // Tracing: remember where the last submissions came from.
-    mira::ThreadPool traced(mira::ThreadPool::Options{.thread_count = 2, .trace_depth = 2});
+    tutti::ThreadPool traced(tutti::ThreadPool::Options{.thread_count = 2, .trace_depth = 2});
     static_cast<void>(traced.submit([] {}));
     static_cast<void>(traced.submit([] {}));
     traced.wait();
-    for (const mira::TaskRecord& record : traced.task_history()) {
+    for (const tutti::TaskRecord& record : traced.task_history()) {
         const std::string frame =
             record.origin.empty() ? std::string("<no frames>") : record.origin[0].description();
         std::println("task #{} submitted from {}", record.sequence, frame);

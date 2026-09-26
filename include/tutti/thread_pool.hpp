@@ -1,21 +1,21 @@
-// Mira - a modern C++23 thread pool.
+// Tutti - a modern C++23 thread pool.
 //
 // Copyright (c) 2026 dqsjqian
 // SPDX-License-Identifier: MIT
 
-#ifndef MIRA_THREAD_POOL_HPP
-#define MIRA_THREAD_POOL_HPP
+#ifndef TUTTI_THREAD_POOL_HPP
+#define TUTTI_THREAD_POOL_HPP
 
-// std::stacktrace is the one C++23 library feature Mira uses that is not
+// std::stacktrace is the one C++23 library feature Tutti uses that is not
 // universally available. libc++ has no <stacktrace> header at all, Apple's
 // included, and GCC 13 and 14 keep the symbols out of the main runtime
 // library, so a toolchain can have the header and still fail to link it. The
-// CMake build probes for both cases and defines MIRA_NO_STACKTRACE; a
+// CMake build probes for both cases and defines TUTTI_NO_STACKTRACE; a
 // header-only user can define it too, and __has_include catches the missing
 // header on its own.
-#if !defined(MIRA_NO_STACKTRACE) && defined(__has_include)
+#if !defined(TUTTI_NO_STACKTRACE) && defined(__has_include)
 #if !__has_include(<stacktrace>)
-#define MIRA_NO_STACKTRACE 1
+#define TUTTI_NO_STACKTRACE 1
 #endif
 #endif
 
@@ -24,11 +24,11 @@
 // /WX build treats that warning as an error.
 #if defined(__has_cpp_attribute)
 #if __has_cpp_attribute(assume) >= 202207L
-#define MIRA_ASSUME(condition) [[assume(condition)]]
+#define TUTTI_ASSUME(condition) [[assume(condition)]]
 #endif
 #endif
-#if !defined(MIRA_ASSUME)
-#define MIRA_ASSUME(condition) static_cast<void>(0)
+#if !defined(TUTTI_ASSUME)
+#define TUTTI_ASSUME(condition) static_cast<void>(0)
 #endif
 
 #include <chrono>
@@ -44,7 +44,7 @@
 #include <memory>
 #include <mutex>
 #include <ranges>
-#if !defined(MIRA_NO_STACKTRACE)
+#if !defined(TUTTI_NO_STACKTRACE)
 #include <stacktrace>
 #endif
 #include <stdexcept>
@@ -55,7 +55,7 @@
 #include <utility>
 #include <vector>
 
-namespace mira {
+namespace tutti {
 
 inline constexpr int version_major = 2;
 inline constexpr int version_minor = 0;
@@ -76,7 +76,7 @@ inline constexpr long cpp_standard = __cplusplus;
 // 202302. C++20 reports 202002 on every compiler, so this threshold accepts
 // every C++23 mode and rejects C++20 and below.
 static_assert(cpp_standard >= 202100L,
-              "Mira requires C++23 or later: use -std=c++23 (GCC/Clang) or "
+              "Tutti requires C++23 or later: use -std=c++23 (GCC/Clang) or "
               "/std:c++23preview or /std:c++latest (MSVC)");
 
 using size_type = std::size_t;
@@ -194,7 +194,7 @@ struct PoolStats {
     State state = State::running;
 };
 
-#if defined(MIRA_NO_STACKTRACE)
+#if defined(TUTTI_NO_STACKTRACE)
 /// One frame of a task's provenance trace.
 ///
 /// This stands in for std::stacktrace_entry on toolchains that have no usable
@@ -228,7 +228,7 @@ using StackTrace = std::stacktrace;
 #endif
 
 /// Whether task provenance can be recorded in this translation unit.
-#if defined(MIRA_NO_STACKTRACE)
+#if defined(TUTTI_NO_STACKTRACE)
 inline constexpr bool has_stacktrace = false;
 #else
 inline constexpr bool has_stacktrace = true;
@@ -255,7 +255,7 @@ struct WorkerInfo {
     return std::format("threads={} idle={} active={} pending={} completed={} max_pending={} "
                        "state={}({})",
                        stats.threads, stats.idle, stats.active, stats.pending, stats.completed,
-                       stats.max_pending, mira::to_string(stats.state),
+                       stats.max_pending, tutti::to_string(stats.state),
                        std::to_underlying(stats.state));
 }
 
@@ -285,14 +285,14 @@ struct WorkerInfo {
 ///     thread doing the waiting. Submitting from inside a task is fine.
 ///
 /// The pool is not movable or copyable, and the submitting entry points are
-/// constrained to lvalue pools. `mira::ThreadPool(4).submit(f)` therefore does
+/// constrained to lvalue pools. `tutti::ThreadPool(4).submit(f)` therefore does
 /// not compile instead of handing back a future tied to a dead pool.
 class ThreadPool {
 public:
-    using size_type = mira::size_type;
+    using size_type = tutti::size_type;
     using Task = MoveOnlyFunction<void()>;
-    using State = mira::State;
-    using PoolError = mira::PoolError;
+    using State = tutti::State;
+    using PoolError = tutti::PoolError;
     using Stats = PoolStats;
 
     /// Upper bound applied to resize() and the constructor, so a bad argument
@@ -309,7 +309,7 @@ public:
             requested == 0 ? 1 : (requested > kMaxThreadCount ? kMaxThreadCount : requested);
         // A pool with zero workers could never make progress, so every caller
         // may rely on at least one worker being requested.
-        MIRA_ASSUME(clamped >= 1);
+        TUTTI_ASSUME(clamped >= 1);
         return clamped;
     }
 
@@ -447,7 +447,7 @@ public:
         const size_type chunk = (total + chunks - 1) / chunks;
         // Every index is covered because chunks <= total, so the rounded-up
         // chunk size is at least one.
-        MIRA_ASSUME(chunk >= 1);
+        TUTTI_ASSUME(chunk >= 1);
 
         std::vector<std::future<void>> futures;
         futures.reserve(chunks);
@@ -547,7 +547,7 @@ public:
     void resize(size_type thread_count) {
         const std::expected<void, PoolError> result = try_resize(thread_count);
         if (!result) {
-            throw std::runtime_error("mira::ThreadPool: resize() on a stopped pool");
+            throw std::runtime_error("tutti::ThreadPool: resize() on a stopped pool");
         }
     }
 
@@ -721,7 +721,7 @@ private:
                 return std::unexpected(PoolError::queue_full);
             }
             if (trace_depth_ != 0) {
-                // Frame 0 is current() itself; the next frames are Mira's own
+                // Frame 0 is current() itself; the next frames are Tutti's own
                 // submit path, then the caller.
                 history_.push_back(
                     TaskRecord{.sequence = ++sequence_, .origin = StackTrace::current(1)});
@@ -740,7 +740,7 @@ private:
     void accept_or_throw(Task task) {
         const std::expected<void, PoolError> accepted = try_accept(std::move(task));
         if (!accepted) {
-            throw std::runtime_error(std::string("mira::ThreadPool: submit() refused: ") +
+            throw std::runtime_error(std::string("tutti::ThreadPool: submit() refused: ") +
                                      std::string(to_string(accepted.error())));
         }
     }
@@ -818,34 +818,34 @@ private:
     State state_ = State::running;
 };
 
-} // namespace mira
+} // namespace tutti
 
-template<> struct std::formatter<mira::State, char> {
+template<> struct std::formatter<tutti::State, char> {
     constexpr auto parse(std::format_parse_context& ctx) { return ctx.begin(); }
 
-    auto format(mira::State state, std::format_context& ctx) const {
-        return std::format_to(ctx.out(), "{}", mira::to_string(state));
+    auto format(tutti::State state, std::format_context& ctx) const {
+        return std::format_to(ctx.out(), "{}", tutti::to_string(state));
     }
 };
 
-template<> struct std::formatter<mira::PoolError, char> {
+template<> struct std::formatter<tutti::PoolError, char> {
     constexpr auto parse(std::format_parse_context& ctx) { return ctx.begin(); }
 
-    auto format(mira::PoolError error, std::format_context& ctx) const {
-        return std::format_to(ctx.out(), "{}", mira::to_string(error));
+    auto format(tutti::PoolError error, std::format_context& ctx) const {
+        return std::format_to(ctx.out(), "{}", tutti::to_string(error));
     }
 };
 
-template<> struct std::formatter<mira::PoolStats, char> {
+template<> struct std::formatter<tutti::PoolStats, char> {
     constexpr auto parse(std::format_parse_context& ctx) { return ctx.begin(); }
 
-    auto format(const mira::PoolStats& stats, std::format_context& ctx) const {
+    auto format(const tutti::PoolStats& stats, std::format_context& ctx) const {
         return std::format_to(ctx.out(),
                               "threads={} idle={} active={} pending={} completed={} "
                               "max_pending={} state={}",
                               stats.threads, stats.idle, stats.active, stats.pending,
-                              stats.completed, stats.max_pending, mira::to_string(stats.state));
+                              stats.completed, stats.max_pending, tutti::to_string(stats.state));
     }
 };
 
-#endif // MIRA_THREAD_POOL_HPP
+#endif // TUTTI_THREAD_POOL_HPP

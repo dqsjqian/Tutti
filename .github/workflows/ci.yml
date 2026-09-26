@@ -88,7 +88,7 @@ jobs:
           fi
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DMIRA_WERROR=ON \
+            -DTUTTI_WERROR=ON \
             -DCMAKE_CXX_FLAGS="$extra_cxx_flags" \
             -DCMAKE_REQUIRED_FLAGS="$extra_cxx_flags"
 
@@ -100,8 +100,8 @@ jobs:
 
       - name: Run the example
         run: |
-          test -x ./build/mira_example || { echo "example not built on this toolchain"; exit 0; }
-          ./build/mira_example
+          test -x ./build/tutti_example || { echo "example not built on this toolchain"; exit 0; }
+          ./build/tutti_example
 
   # ---------------------------------------------------------------------------
   # macOS: Apple's own clang and the newest upstream clang, both on libc++.
@@ -149,7 +149,7 @@ jobs:
           cmake --version | head -1
 
       - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DMIRA_WERROR=ON
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DTUTTI_WERROR=ON
 
       - name: Build
         run: cmake --build build --parallel
@@ -159,8 +159,8 @@ jobs:
 
       - name: Run the example
         run: |
-          test -x ./build/mira_example || { echo "example not built on this toolchain"; exit 0; }
-          ./build/mira_example
+          test -x ./build/tutti_example || { echo "example not built on this toolchain"; exit 0; }
+          ./build/tutti_example
 
   # ---------------------------------------------------------------------------
   # Windows: MSVC from two Visual Studio generations, plus MinGW-w64 GCC.
@@ -191,7 +191,7 @@ jobs:
 
       - name: Configure
         shell: pwsh
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DMIRA_WERROR=ON
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DTUTTI_WERROR=ON
 
       - name: Build
         shell: pwsh
@@ -204,8 +204,8 @@ jobs:
       - name: Run the example
         shell: pwsh
         run: |
-          if (Test-Path ./build/mira_example.exe) {
-            ./build/mira_example.exe
+          if (Test-Path ./build/tutti_example.exe) {
+            ./build/tutti_example.exe
           } else {
             Write-Host "example not built on this toolchain"
           }
@@ -233,7 +233,7 @@ jobs:
 
       - name: Configure
         shell: msys2 {0}
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DMIRA_WERROR=ON
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DTUTTI_WERROR=ON
 
       - name: Build
         shell: msys2 {0}
@@ -246,8 +246,8 @@ jobs:
       - name: Run the example
         shell: msys2 {0}
         run: |
-          test -x ./build/mira_example.exe || { echo "example not built on this toolchain"; exit 0; }
-          ./build/mira_example.exe
+          test -x ./build/tutti_example.exe || { echo "example not built on this toolchain"; exit 0; }
+          ./build/tutti_example.exe
 
   # ---------------------------------------------------------------------------
   # Sanitizers: a thread pool that only passes its own tests is not evidence.
@@ -319,6 +319,6 @@ jobs:
         run: |
           clang-format --version
           clang-format --dry-run --Werror --style=file \
-            include/mira/thread_pool.hpp \
+            include/tutti/thread_pool.hpp \
             tests/thread_pool_test.cpp \
             examples/basic_usage.cpp

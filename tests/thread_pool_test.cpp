@@ -1,9 +1,9 @@
-// Mira - self-contained test suite.
+// Tutti - self-contained test suite.
 //
 // Copyright (c) 2026 dqsjqian
 // SPDX-License-Identifier: MIT
 
-#include <mira/thread_pool.hpp>
+#include <tutti/thread_pool.hpp>
 
 #include <atomic>
 #include <chrono>
@@ -60,33 +60,33 @@ template<class T>
 concept ParallelForableAsRvalue =
     requires(T&& pool) { std::forward<T>(pool).parallel_for(0, 1, [](int) {}); };
 
-static_assert(SubmittableAsLvalue<mira::ThreadPool>);
-static_assert(!SubmittableAsRvalue<mira::ThreadPool>);
-static_assert(!ParallelForableAsRvalue<mira::ThreadPool>);
+static_assert(SubmittableAsLvalue<tutti::ThreadPool>);
+static_assert(!SubmittableAsRvalue<tutti::ThreadPool>);
+static_assert(!ParallelForableAsRvalue<tutti::ThreadPool>);
 
-static_assert(mira::version_major == 2);
-static_assert(mira::cpp_standard >= 202100L);
+static_assert(tutti::version_major == 2);
+static_assert(tutti::cpp_standard >= 202100L);
 
 // ---------------------------------------------------------------------------
 // Construction and observation
 // ---------------------------------------------------------------------------
 
 void test_default_construction() {
-    CHECK(mira::ThreadPool::default_thread_count() >= 1);
-    mira::ThreadPool pool;
-    CHECK(pool.thread_count() == mira::ThreadPool::default_thread_count());
+    CHECK(tutti::ThreadPool::default_thread_count() >= 1);
+    tutti::ThreadPool pool;
+    CHECK(pool.thread_count() == tutti::ThreadPool::default_thread_count());
     CHECK(pool.idle_count() == pool.thread_count());
     CHECK(pool.active_count() == 0);
     CHECK(pool.pending_count() == 0);
     CHECK(pool.completed_count() == 0);
     CHECK(pool.max_pending() == 0);
-    CHECK(pool.state() == mira::State::running);
+    CHECK(pool.state() == tutti::State::running);
     CHECK(!pool.paused());
     CHECK(!pool.stopped());
 }
 
 void test_options_construction() {
-    mira::ThreadPool pool(mira::ThreadPool::Options{.thread_count = 3, .max_pending = 5});
+    tutti::ThreadPool pool(tutti::ThreadPool::Options{.thread_count = 3, .max_pending = 5});
     CHECK(pool.thread_count() == 3);
     CHECK(pool.max_pending() == 5);
     CHECK(pool.task_history().empty());
@@ -96,41 +96,41 @@ void test_thread_count_is_clamped() {
     // ThreadPool(0) promises a clamped explicit count, so it means "1 worker"
     // rather than "auto". This also exercises the clamp through the real
     // constructor.
-    mira::ThreadPool small(0);
+    tutti::ThreadPool small(0);
     CHECK(small.thread_count() == 1);
 
     // The upper bound is checked through the pure helper, not by constructing a
     // pool: verifying it for real means spawning kMaxThreadCount threads, which
     // is exactly what the clamp exists to prevent, and CI runners refuse to
     // create that many.
-    CHECK(mira::ThreadPool::clamp_thread_count(0) == 1);
-    CHECK(mira::ThreadPool::clamp_thread_count(1) == 1);
-    CHECK(mira::ThreadPool::clamp_thread_count(4) == 4);
-    CHECK(mira::ThreadPool::clamp_thread_count(mira::ThreadPool::kMaxThreadCount) ==
-          mira::ThreadPool::kMaxThreadCount);
-    CHECK(mira::ThreadPool::clamp_thread_count(mira::ThreadPool::kMaxThreadCount + 1000) ==
-          mira::ThreadPool::kMaxThreadCount);
+    CHECK(tutti::ThreadPool::clamp_thread_count(0) == 1);
+    CHECK(tutti::ThreadPool::clamp_thread_count(1) == 1);
+    CHECK(tutti::ThreadPool::clamp_thread_count(4) == 4);
+    CHECK(tutti::ThreadPool::clamp_thread_count(tutti::ThreadPool::kMaxThreadCount) ==
+          tutti::ThreadPool::kMaxThreadCount);
+    CHECK(tutti::ThreadPool::clamp_thread_count(tutti::ThreadPool::kMaxThreadCount + 1000) ==
+          tutti::ThreadPool::kMaxThreadCount);
 }
 
 void test_stats_snapshot() {
-    mira::ThreadPool pool(2);
-    const mira::PoolStats stats = pool.stats();
+    tutti::ThreadPool pool(2);
+    const tutti::PoolStats stats = pool.stats();
     CHECK(stats.threads == 2);
     CHECK(stats.idle == 2);
     CHECK(stats.active == 0);
     CHECK(stats.pending == 0);
     CHECK(stats.completed == 0);
-    CHECK(stats.state == mira::State::running);
+    CHECK(stats.state == tutti::State::running);
 
     static_cast<void>(pool.submit([] { return 1; }).get());
-    const mira::PoolStats after = pool.stats();
+    const tutti::PoolStats after = pool.stats();
     CHECK(after.completed == 1);
     CHECK(after.threads == 2);
 }
 
 void test_worker_identity() {
-    mira::ThreadPool pool(3);
-    const std::vector<mira::WorkerInfo> workers = pool.workers();
+    tutti::ThreadPool pool(3);
+    const std::vector<tutti::WorkerInfo> workers = pool.workers();
     CHECK(workers.size() == 3);
     CHECK(workers[0].index == 0);
     CHECK(workers[2].index == 2);
@@ -141,7 +141,7 @@ void test_worker_identity() {
     const std::thread::id reported = workers[0].id;
     const std::thread::id observed = pool.submit([] { return std::this_thread::get_id(); }).get();
     bool matched = false;
-    for (const mira::WorkerInfo& worker : pool.workers()) {
+    for (const tutti::WorkerInfo& worker : pool.workers()) {
         matched = matched || worker.id == observed;
     }
     CHECK(matched);
@@ -153,19 +153,19 @@ void test_worker_identity() {
 // ---------------------------------------------------------------------------
 
 void test_submit_returns_value() {
-    mira::ThreadPool pool(2);
+    tutti::ThreadPool pool(2);
     auto future = pool.submit([] { return 42; });
     CHECK(future.get() == 42);
 }
 
 void test_submit_with_arguments() {
-    mira::ThreadPool pool(2);
+    tutti::ThreadPool pool(2);
     auto future = pool.submit([](int a, int b) { return a * b; }, 6, 7);
     CHECK(future.get() == 42);
 }
 
 void test_submit_void_task() {
-    mira::ThreadPool pool(2);
+    tutti::ThreadPool pool(2);
     std::atomic<int> ran{0};
     auto future = pool.submit([&ran](int by) { ran.fetch_add(by); }, 5);
     future.get();
@@ -178,7 +178,7 @@ void test_submit_member_function() {
         int add(int by) { return value += by; }
     };
 
-    mira::ThreadPool pool(2);
+    tutti::ThreadPool pool(2);
     Counter counter;
 
     auto by_pointer = pool.submit(&Counter::add, &counter, 3);
@@ -189,7 +189,7 @@ void test_submit_member_function() {
 }
 
 void test_submit_move_only_callable() {
-    mira::ThreadPool pool(2);
+    tutti::ThreadPool pool(2);
     auto owned = std::make_unique<int>(21);
     auto future = pool.submit([value = std::move(owned)] { return *value * 2; });
     CHECK(future.get() == 42);
@@ -208,13 +208,13 @@ void test_submit_move_only_callable_object() {
         int operator()() const { return *value; }
     };
 
-    mira::ThreadPool pool(2);
+    tutti::ThreadPool pool(2);
     auto future = pool.submit(MoveOnly{11});
     CHECK(future.get() == 11);
 }
 
 void test_exception_propagates_through_future() {
-    mira::ThreadPool pool(2);
+    tutti::ThreadPool pool(2);
     auto future = pool.submit([]() -> int { throw std::runtime_error("boom"); });
 
     bool caught = false;
@@ -231,7 +231,7 @@ void test_exception_propagates_through_future() {
 }
 
 void test_worker_survives_unknown_exception() {
-    mira::ThreadPool pool(2);
+    tutti::ThreadPool pool(2);
     auto throwing = pool.submit([] { throw 7; });
     bool caught = false;
     try {
@@ -244,7 +244,7 @@ void test_worker_survives_unknown_exception() {
 }
 
 void test_many_tasks() {
-    mira::ThreadPool pool(4);
+    tutti::ThreadPool pool(4);
     std::vector<std::future<long long>> futures;
     futures.reserve(1000);
     for (long long i = 1; i <= 1000; ++i) {
@@ -265,10 +265,10 @@ void test_many_tasks() {
 
 void test_tasks_run_concurrently() {
     const unsigned int workers =
-        mira::ThreadPool::default_thread_count() < 2
+        tutti::ThreadPool::default_thread_count() < 2
             ? 2u
-            : static_cast<unsigned int>(mira::ThreadPool::default_thread_count());
-    mira::ThreadPool pool(workers);
+            : static_cast<unsigned int>(tutti::ThreadPool::default_thread_count());
+    tutti::ThreadPool pool(workers);
 
     std::atomic<int> arrived{0};
     std::atomic<bool> release{false};
@@ -298,36 +298,36 @@ void test_tasks_run_concurrently() {
 // ---------------------------------------------------------------------------
 
 void test_try_submit_succeeds() {
-    mira::ThreadPool pool(2);
-    std::expected<std::future<int>, mira::PoolError> result = pool.try_submit([] { return 5; });
+    tutti::ThreadPool pool(2);
+    std::expected<std::future<int>, tutti::PoolError> result = pool.try_submit([] { return 5; });
     CHECK(result.has_value());
     CHECK(result.value().get() == 5);
 }
 
 void test_try_submit_reports_stopped() {
-    mira::ThreadPool pool(2);
+    tutti::ThreadPool pool(2);
     pool.shutdown();
 
-    std::expected<std::future<int>, mira::PoolError> result = pool.try_submit([] { return 5; });
+    std::expected<std::future<int>, tutti::PoolError> result = pool.try_submit([] { return 5; });
     CHECK(!result.has_value());
-    CHECK(result.error() == mira::PoolError::stopped);
-    CHECK(mira::to_string(result.error()) == "stopped");
+    CHECK(result.error() == tutti::PoolError::stopped);
+    CHECK(tutti::to_string(result.error()) == "stopped");
 }
 
 void test_try_submit_reports_queue_full() {
     // One paused worker plus a queue limit of two: the worker cannot drain the
     // queue, so the third submission has to be refused.
-    mira::ThreadPool pool(mira::ThreadPool::Options{.thread_count = 1, .max_pending = 2});
+    tutti::ThreadPool pool(tutti::ThreadPool::Options{.thread_count = 1, .max_pending = 2});
     pool.pause();
 
     CHECK(pool.try_submit([] {}).has_value());
     CHECK(pool.try_submit([] {}).has_value());
     CHECK(pool.pending_count() == 2);
 
-    std::expected<std::future<void>, mira::PoolError> refused = pool.try_submit([] {});
+    std::expected<std::future<void>, tutti::PoolError> refused = pool.try_submit([] {});
     CHECK(!refused.has_value());
-    CHECK(refused.error() == mira::PoolError::queue_full);
-    CHECK(mira::to_string(refused.error()) == "queue_full");
+    CHECK(refused.error() == tutti::PoolError::queue_full);
+    CHECK(tutti::to_string(refused.error()) == "queue_full");
 
     // The throwing overload reports the same condition as an exception.
     bool threw = false;
@@ -350,7 +350,7 @@ void test_try_submit_reports_queue_full() {
 // ---------------------------------------------------------------------------
 
 void test_parallel_for_covers_every_index() {
-    mira::ThreadPool pool(4);
+    tutti::ThreadPool pool(4);
     std::vector<int> seen(200, 0);
     pool.parallel_for(0, 200, [&seen](int index) { seen[static_cast<std::size_t>(index)] = 1; });
 
@@ -360,7 +360,7 @@ void test_parallel_for_covers_every_index() {
 }
 
 void test_parallel_for_empty_and_single() {
-    mira::ThreadPool pool(2);
+    tutti::ThreadPool pool(2);
     std::atomic<int> calls{0};
     std::atomic<int> observed{-1};
 
@@ -379,7 +379,7 @@ void test_parallel_for_empty_and_single() {
 }
 
 void test_parallel_for_rethrows_first_exception() {
-    mira::ThreadPool pool(2);
+    tutti::ThreadPool pool(2);
     std::vector<int> visited(40, 0);
 
     bool caught = false;
@@ -411,14 +411,14 @@ void test_parallel_for_rethrows_first_exception() {
 }
 
 void test_parallel_for_unsigned_range() {
-    mira::ThreadPool pool(3);
+    tutti::ThreadPool pool(3);
     std::vector<unsigned int> seen(10, 0u);
     pool.parallel_for(0u, 10u, [&seen](unsigned int index) { seen[index] += 1u; });
     CHECK(std::accumulate(seen.begin(), seen.end(), 0u) == 10u);
 }
 
 void test_parallel_for_each() {
-    mira::ThreadPool pool(4);
+    tutti::ThreadPool pool(4);
     std::vector<int> data(1000, 3);
     pool.parallel_for_each(data, [](int& value) { value *= 2; });
     CHECK(std::accumulate(data.begin(), data.end(), 0) == 6000);
@@ -434,7 +434,7 @@ void test_parallel_for_each() {
 // ---------------------------------------------------------------------------
 
 void test_wait_blocks_until_done() {
-    mira::ThreadPool pool(3);
+    tutti::ThreadPool pool(3);
     std::atomic<int> finished{0};
     for (int i = 0; i < 200; ++i) {
         static_cast<void>(pool.submit([&finished] {
@@ -450,7 +450,7 @@ void test_wait_blocks_until_done() {
 }
 
 void test_wait_for_times_out_then_succeeds() {
-    mira::ThreadPool pool(1);
+    tutti::ThreadPool pool(1);
     CHECK(pool.wait_for(std::chrono::milliseconds(10)));
 
     static_cast<void>(
@@ -464,12 +464,12 @@ void test_wait_for_times_out_then_succeeds() {
 // ---------------------------------------------------------------------------
 
 void test_pause_and_resume() {
-    mira::ThreadPool pool(2);
+    tutti::ThreadPool pool(2);
     std::atomic<int> ran{0};
 
     pool.pause();
     CHECK(pool.paused());
-    CHECK(pool.state() == mira::State::paused);
+    CHECK(pool.state() == tutti::State::paused);
     for (int i = 0; i < 20; ++i) {
         static_cast<void>(pool.submit([&ran] { ran.fetch_add(1); }));
     }
@@ -484,16 +484,16 @@ void test_pause_and_resume() {
 }
 
 void test_pause_is_noop_when_draining() {
-    mira::ThreadPool pool(2);
+    tutti::ThreadPool pool(2);
     pool.shutdown();
     pool.pause();
-    CHECK(pool.state() == mira::State::draining);
+    CHECK(pool.state() == tutti::State::draining);
     pool.resume();
-    CHECK(pool.state() == mira::State::draining);
+    CHECK(pool.state() == tutti::State::draining);
 }
 
 void test_resize() {
-    mira::ThreadPool pool(2);
+    tutti::ThreadPool pool(2);
     CHECK(pool.thread_count() == 2);
 
     pool.resize(6);
@@ -511,10 +511,10 @@ void test_resize() {
 }
 
 void test_resize_stress() {
-    mira::ThreadPool pool(4);
+    tutti::ThreadPool pool(4);
     std::atomic<long long> total{0};
     for (int round = 0; round < 20; ++round) {
-        pool.resize(static_cast<mira::ThreadPool::size_type>(2 + (round % 8)));
+        pool.resize(static_cast<tutti::ThreadPool::size_type>(2 + (round % 8)));
         for (int i = 0; i < 50; ++i) {
             static_cast<void>(pool.submit([&total] { total.fetch_add(1); }));
         }
@@ -524,14 +524,14 @@ void test_resize_stress() {
 }
 
 void test_try_resize_reports_stopped() {
-    mira::ThreadPool pool(2);
+    tutti::ThreadPool pool(2);
     CHECK(pool.try_resize(4).has_value());
     CHECK(pool.thread_count() == 4);
 
     pool.shutdown();
-    std::expected<void, mira::PoolError> result = pool.try_resize(2);
+    std::expected<void, tutti::PoolError> result = pool.try_resize(2);
     CHECK(!result.has_value());
-    CHECK(result.error() == mira::PoolError::stopped);
+    CHECK(result.error() == tutti::PoolError::stopped);
 
     bool threw = false;
     try {
@@ -547,7 +547,7 @@ void test_try_resize_reports_stopped() {
 // ---------------------------------------------------------------------------
 
 void test_nested_submit() {
-    mira::ThreadPool pool(2);
+    tutti::ThreadPool pool(2);
     auto outer = pool.submit([&pool] {
         auto inner = pool.submit([] { return 21; });
         return inner.get() * 2;
@@ -556,10 +556,10 @@ void test_nested_submit() {
 }
 
 void test_shutdown_rejects_new_tasks() {
-    mira::ThreadPool pool(2);
+    tutti::ThreadPool pool(2);
     pool.shutdown();
     CHECK(pool.stopped());
-    CHECK(pool.state() == mira::State::draining);
+    CHECK(pool.state() == tutti::State::draining);
 
     bool threw = false;
     try {
@@ -571,7 +571,7 @@ void test_shutdown_rejects_new_tasks() {
 }
 
 void test_shutdown_is_idempotent() {
-    mira::ThreadPool pool(2);
+    tutti::ThreadPool pool(2);
     static_cast<void>(pool.submit([] {}));
     pool.shutdown();
     pool.shutdown();
@@ -581,7 +581,7 @@ void test_shutdown_is_idempotent() {
 void test_destructor_drains_queue() {
     std::atomic<int> counter{0};
     {
-        mira::ThreadPool pool(4);
+        tutti::ThreadPool pool(4);
         for (int i = 0; i < 100; ++i) {
             static_cast<void>(pool.submit([&counter] { counter.fetch_add(1); }));
         }
@@ -595,20 +595,20 @@ void test_destructor_drains_queue() {
 // ---------------------------------------------------------------------------
 
 void test_task_history_is_bounded_ring() {
-    mira::ThreadPool pool(mira::ThreadPool::Options{.thread_count = 2, .trace_depth = 3});
+    tutti::ThreadPool pool(tutti::ThreadPool::Options{.thread_count = 2, .trace_depth = 3});
     for (int i = 0; i < 5; ++i) {
         static_cast<void>(pool.submit([] {}));
     }
     pool.wait();
 
-    const std::vector<mira::TaskRecord> history = pool.task_history();
+    const std::vector<tutti::TaskRecord> history = pool.task_history();
     CHECK(history.size() == 3);
     // The oldest entries were dropped, so the window holds submissions 3 to 5.
     CHECK(history.front().sequence == 3);
     CHECK(history.back().sequence == 5);
     // Frames are only there where std::stacktrace is usable. On toolchains
     // without it the trace is deliberately empty rather than absent.
-    if constexpr (mira::has_stacktrace) {
+    if constexpr (tutti::has_stacktrace) {
         CHECK(!history.back().origin.empty());
     } else {
         CHECK(history.back().origin.empty());
@@ -616,25 +616,25 @@ void test_task_history_is_bounded_ring() {
 }
 
 void test_task_history_is_empty_without_tracing() {
-    mira::ThreadPool pool(2);
+    tutti::ThreadPool pool(2);
     static_cast<void>(pool.submit([] {}));
     pool.wait();
     CHECK(pool.task_history().empty());
 }
 
 void test_formatting() {
-    CHECK(std::format("{}", mira::State::running) == "running");
-    CHECK(std::format("{}", mira::State::paused) == "paused");
-    CHECK(std::format("{}", mira::State::draining) == "draining");
-    CHECK(std::format("{}", mira::PoolError::queue_full) == "queue_full");
-    CHECK(std::format("{}", mira::PoolError::stopped) == "stopped");
+    CHECK(std::format("{}", tutti::State::running) == "running");
+    CHECK(std::format("{}", tutti::State::paused) == "paused");
+    CHECK(std::format("{}", tutti::State::draining) == "draining");
+    CHECK(std::format("{}", tutti::PoolError::queue_full) == "queue_full");
+    CHECK(std::format("{}", tutti::PoolError::stopped) == "stopped");
 
-    mira::ThreadPool pool(2);
+    tutti::ThreadPool pool(2);
     const std::string rendered = std::format("{}", pool.stats());
     CHECK(rendered.find("threads=2") != std::string::npos);
     CHECK(rendered.find("state=running") != std::string::npos);
 
-    const std::string via_to_string = mira::to_string(pool.stats());
+    const std::string via_to_string = tutti::to_string(pool.stats());
     CHECK(via_to_string.find("max_pending=0") != std::string::npos);
     CHECK(via_to_string.find("state=running(0)") != std::string::npos);
 }

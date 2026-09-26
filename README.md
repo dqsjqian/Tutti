@@ -1,18 +1,18 @@
-# Mira
+# Tutti
 
-[![CI](https://github.com/dqsjqian/Mira/actions/workflows/ci.yml/badge.svg)](https://github.com/dqsjqian/Mira/actions/workflows/ci.yml)
+[![CI](https://github.com/dqsjqian/Tutti/actions/workflows/ci.yml/badge.svg)](https://github.com/dqsjqian/Tutti/actions/workflows/ci.yml)
 
 A modern C++23 thread pool.
 
-Mira gives you a fixed pool of worker threads and a clean, exception-safe API for
+Tutti gives you a fixed pool of worker threads and a clean, exception-safe API for
 running work on them. It is the successor to an older C++11 thread pool and is
 built on the modern C++ threading vocabulary: `std::jthread`, `std::stop_token`,
 `std::move_only_function` and `std::expected`.
 
 ```cpp
-#include <mira/thread_pool.hpp>
+#include <tutti/thread_pool.hpp>
 
-mira::ThreadPool pool;                                  // one worker per CPU core
+tutti::ThreadPool pool;                                  // one worker per CPU core
 auto answer = pool.submit([] { return 42; });           // runs on a worker
 std::println("answer = {}", answer.get());              // 42
 ```
@@ -40,13 +40,13 @@ std::println("answer = {}", answer.get());              // 42
 - **Thread-safe submission.** `submit()` can be called concurrently from any
   number of threads.
 - **No dangling futures.** The submitting entry points are constrained to lvalue
-  pools, so `mira::ThreadPool(4).submit(f)` is a compile error rather than a
+  pools, so `tutti::ThreadPool(4).submit(f)` is a compile error rather than a
   future tied to a destroyed pool.
 
 ## Requirements
 
 - A C++23 compiler and standard library. CI builds and runs the test suite with
-  `-DMIRA_WERROR=ON` on every combination below, so these are verified, not
+  `-DTUTTI_WERROR=ON` on every combination below, so these are verified, not
   inferred:
 
   | Toolchain | Standard library |
@@ -65,25 +65,25 @@ std::println("answer = {}", answer.get());              // 42
 
 ### Portability notes
 
-Two C++23 library features Mira uses are still missing from libc++, Apple's
-included. Mira detects both at build time and degrades instead of failing:
+Two C++23 library features Tutti uses are still missing from libc++, Apple's
+included. Tutti detects both at build time and degrades instead of failing:
 
 - No `<stacktrace>`. Task provenance in `task_history()` is disabled,
-  `mira::StackTrace` is an empty type, and `mira::has_stacktrace` is `false`.
-- No `std::move_only_function`. `mira::MoveOnlyFunction` falls back to an
+  `tutti::StackTrace` is an empty type, and `tutti::has_stacktrace` is `false`.
+- No `std::move_only_function`. `tutti::MoveOnlyFunction` falls back to an
   equivalent move-only, type-erased wrapper. No public API changes.
 
-Clang 18 and earlier cannot build Mira against libstdc++ at all: they report
+Clang 18 and earlier cannot build Tutti against libstdc++ at all: they report
 `__cpp_concepts` as `201907L`, and libstdc++'s `<expected>` requires `202002L`.
 Clang 19 is the first release that reports `202002L`.
 
 ## Getting started
 
-Drop `include/mira/thread_pool.hpp` into your project, or build it with CMake:
+Drop `include/tutti/thread_pool.hpp` into your project, or build it with CMake:
 
 ```cmake
-add_subdirectory(Mira)
-target_link_libraries(your_target PRIVATE mira::mira)
+add_subdirectory(Tutti)
+target_link_libraries(your_target PRIVATE tutti::tutti)
 ```
 
 Build and run the tests and examples:
@@ -102,7 +102,7 @@ ctest --test-dir build --output-on-failure
 accepted. The returned future carries both the result and any exception.
 
 ```cpp
-mira::ThreadPool pool(4);
+tutti::ThreadPool pool(4);
 
 // A value-returning task.
 std::future<int> answer = pool.submit([] { return 42; });
@@ -129,10 +129,10 @@ static_cast<void>(pool.submit([] { /* ... */ }));
 
 ### Refusing work without exceptions
 
-`try_submit()` returns `std::expected<std::future<R>, mira::PoolError>`:
+`try_submit()` returns `std::expected<std::future<R>, tutti::PoolError>`:
 
 ```cpp
-mira::ThreadPool pool(mira::ThreadPool::Options{.thread_count = 4, .max_pending = 1024});
+tutti::ThreadPool pool(tutti::ThreadPool::Options{.thread_count = 4, .max_pending = 1024});
 
 if (auto accepted = pool.try_submit([] { return 7; })) {
     std::println("result = {}", accepted->get());
@@ -210,7 +210,7 @@ std::println("{}", pool.stats());
 // std::formatter, so print it through a stream if you need it.
 std::println("{} workers", pool.workers().size());
 
-for (const mira::TaskRecord& record : pool.task_history()) {
+for (const tutti::TaskRecord& record : pool.task_history()) {
     const std::string frame =
         record.origin.empty() ? std::string("<none>") : record.origin[0].description();
     std::println("task #{} from {}", record.sequence, frame);
@@ -271,12 +271,12 @@ does not implement the parts that would help a thread pool. `= delete("reason")`
 `std::simd`, `std::execution` senders and `std::optional<T&>` are all absent, and
 the C++26 library additions that do exist are unrelated to scheduling. Building
 with `/std:c++latest` works and reports `__cplusplus == 202400`, but nothing in
-Mira needs it.
+Tutti needs it.
 
 ## Design notes
 
 The first version of this library was written against C++11 and showed its age.
-Mira keeps the useful parts of that API and rebuilds the rest:
+Tutti keeps the useful parts of that API and rebuilds the rest:
 
 | Concern | Before | Now |
 | --- | --- | --- |
@@ -292,7 +292,7 @@ Mira keeps the useful parts of that API and rebuilds the rest:
 
 A few implementation details worth knowing:
 
-- Tasks are type-erased into a move-only callable (`mira::MoveOnlyFunction<void()>`,
+- Tasks are type-erased into a move-only callable (`tutti::MoveOnlyFunction<void()>`,
   which is `std::move_only_function` where available). The concrete callable lives
   inside a `std::packaged_task`, which is what gives every task a future and lets
   the queue hold move-only callables without an indirection.
