@@ -123,6 +123,10 @@ void test_stats_snapshot() {
     CHECK(stats.state == tutti::State::running);
 
     static_cast<void>(pool.submit([] { return 1; }).get());
+    // A future is fulfilled before the pool finishes bookkeeping for its
+    // task, so get() can return while completed is still catching up.
+    // wait() joins that bookkeeping; only then is stats() exact.
+    pool.wait();
     const tutti::PoolStats after = pool.stats();
     CHECK(after.completed == 1);
     CHECK(after.threads == 2);
