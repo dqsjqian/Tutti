@@ -59,7 +59,7 @@ namespace tutti {
 
 inline constexpr int version_major = 2;
 inline constexpr int version_minor = 1;
-inline constexpr int version_patch = 0;
+inline constexpr int version_patch = 1;
 
 /// The C++ standard level this translation unit was compiled with.
 ///
