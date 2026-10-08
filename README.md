@@ -159,7 +159,9 @@ pool.parallel_for(std::size_t{0}, data.size(), [&data, &twos](std::size_t index)
 ```
 
 If a chunk throws, the remaining chunks are still awaited and the first exception
-is rethrown to the caller.
+is rethrown to the caller. If a submission fails (for example, the bounded queue
+is full), every already accepted chunk is awaited before that submission error
+is rethrown, keeping the shared callback alive throughout.
 
 ### Exceptions
 

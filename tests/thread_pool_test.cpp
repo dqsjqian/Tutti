@@ -65,6 +65,11 @@ static_assert(!SubmittableAsRvalue<tutti::ThreadPool>);
 static_assert(!ParallelForableAsRvalue<tutti::ThreadPool>);
 
 static_assert(tutti::version_major == 2);
+#if defined(TUTTI_EXPECTED_VERSION_MAJOR)
+static_assert(tutti::version_major == TUTTI_EXPECTED_VERSION_MAJOR);
+static_assert(tutti::version_minor == TUTTI_EXPECTED_VERSION_MINOR);
+static_assert(tutti::version_patch == TUTTI_EXPECTED_VERSION_PATCH);
+#endif
 static_assert(tutti::cpp_standard >= 202100L);
 
 // ---------------------------------------------------------------------------
@@ -399,7 +404,9 @@ void test_parallel_for_rethrows_first_exception() {
     }
     CHECK(caught);
 
-    // Every chunk was awaited, so nothing is left pending or running.
+    // Futures become ready before worker bookkeeping completes. Synchronize
+    // those counters before checking them, just like the submission tests.
+    pool.wait();
     CHECK(pool.pending_count() == 0);
     CHECK(pool.active_count() == 0);
 
@@ -414,11 +421,74 @@ void test_parallel_for_rethrows_first_exception() {
     CHECK(pool.submit([] { return 1; }).get() == 1);
 }
 
+void test_parallel_for_waits_after_submission_failure() {
+    // Keep both workers occupied so exactly one chunk can enter the bounded
+    // queue, then the next submission must fail. The accepted chunk must still
+    // finish before parallel_for() unwinds its callback and returns.
+    tutti::ThreadPool pool(tutti::ThreadPool::Options{.thread_count = 2, .max_pending = 1});
+    std::promise<void> release;
+    const std::shared_future<void> released = release.get_future().share();
+    std::atomic<int> started{0};
+    auto first = pool.submit([&started, released] {
+        started.fetch_add(1, std::memory_order_release);
+        released.wait();
+    });
+    CHECK(wait_for(started, 1, std::chrono::seconds(5)));
+    auto second = pool.submit([&started, released] {
+        started.fetch_add(1, std::memory_order_release);
+        released.wait();
+    });
+    CHECK(wait_for(started, 2, std::chrono::seconds(5)));
+
+    std::atomic<int> completed{0};
+    auto bulk = std::async(std::launch::async, [&pool, &completed] {
+        bool rejected = false;
+        try {
+            pool.parallel_for(
+                0, 4, [&completed](int) { completed.fetch_add(1, std::memory_order_relaxed); });
+        } catch (const std::runtime_error& error) {
+            rejected = std::string(error.what()).find("queue_full") != std::string::npos;
+        }
+        return rejected;
+    });
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (pool.pending_count() == 0 && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::yield();
+    }
+    CHECK(pool.pending_count() == 1);
+    CHECK(bulk.wait_for(std::chrono::milliseconds(50)) == std::future_status::timeout);
+    release.set_value();
+    CHECK(bulk.get());
+    CHECK(completed.load(std::memory_order_relaxed) == 2);
+    first.get();
+    second.get();
+    pool.wait();
+    CHECK(pool.submit([] { return 9; }).get() == 9);
+}
+
 void test_parallel_for_unsigned_range() {
     tutti::ThreadPool pool(3);
     std::vector<unsigned int> seen(10, 0u);
     pool.parallel_for(0u, 10u, [&seen](unsigned int index) { seen[index] += 1u; });
     CHECK(std::accumulate(seen.begin(), seen.end(), 0u) == 10u);
+}
+
+void test_parallel_for_each_iterator_range() {
+    // A sized random-access range need not provide operator[].
+    struct IteratorRange {
+        int* first;
+        int* last;
+        int* begin() const { return first; }
+        int* end() const { return last; }
+    };
+    static_assert(std::ranges::random_access_range<IteratorRange>);
+    static_assert(std::ranges::sized_range<IteratorRange>);
+
+    int values[] = {1, 2, 3, 4};
+    tutti::ThreadPool pool(2);
+    pool.parallel_for_each(IteratorRange{values, values + 4}, [](int& value) { value *= 3; });
+    CHECK(std::accumulate(std::begin(values), std::end(values), 0) == 30);
 }
 
 void test_parallel_for_each() {
@@ -670,8 +740,10 @@ int main() {
     test_parallel_for_covers_every_index();
     test_parallel_for_empty_and_single();
     test_parallel_for_rethrows_first_exception();
+    test_parallel_for_waits_after_submission_failure();
     test_parallel_for_unsigned_range();
     test_parallel_for_each();
+    test_parallel_for_each_iterator_range();
 
     test_wait_blocks_until_done();
     test_wait_for_times_out_then_succeeds();

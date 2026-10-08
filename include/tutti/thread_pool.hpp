@@ -58,7 +58,7 @@
 namespace tutti {
 
 inline constexpr int version_major = 2;
-inline constexpr int version_minor = 0;
+inline constexpr int version_minor = 1;
 inline constexpr int version_patch = 0;
 
 /// The C++ standard level this translation unit was compiled with.
@@ -424,7 +424,9 @@ public:
     /// The range is split into at most thread_count() contiguous chunks, one
     /// task per chunk. This call blocks until every chunk has finished. If a
     /// chunk throws, the remaining chunks are still awaited and the first
-    /// exception is rethrown to the caller.
+    /// exception is rethrown to the caller. If submitting a chunk fails, all
+    /// previously accepted chunks are awaited before the submission error is
+    /// rethrown. The shared callback stays alive until those chunks finish.
     ///
     /// Must not be called from inside a task.
     template<class Self, class Index, class F>
@@ -451,21 +453,28 @@ public:
 
         std::vector<std::future<void>> futures;
         futures.reserve(chunks);
-        for (size_type index = 0; index < chunks; ++index) {
-            const size_type offset = index * chunk;
-            if (offset >= total) {
-                break;
-            }
-            const size_type remaining = total - offset;
-            const size_type length = remaining < chunk ? remaining : chunk;
-            futures.push_back(self.submit([&fn, first, offset, length] {
-                for (size_type step = 0; step < length; ++step) {
-                    std::invoke(fn, static_cast<Index>(first + static_cast<Index>(offset + step)));
+        std::exception_ptr failure;
+        try {
+            for (size_type index = 0; index < chunks; ++index) {
+                const size_type offset = index * chunk;
+                if (offset >= total) {
+                    break;
                 }
-            }));
+                const size_type remaining = total - offset;
+                const size_type length = remaining < chunk ? remaining : chunk;
+                futures.push_back(self.submit([&fn, first, offset, length] {
+                    for (size_type step = 0; step < length; ++step) {
+                        std::invoke(fn,
+                                    static_cast<Index>(first + static_cast<Index>(offset + step)));
+                    }
+                }));
+            }
+        } catch (...) {
+            // Accepted chunks borrow fn. Keep it alive until they finish even
+            // when a later submission fails (e.g. a full bounded queue).
+            failure = std::current_exception();
         }
 
-        std::exception_ptr failure;
         for (std::future<void>& future : futures) {
             try {
                 future.get();
@@ -495,8 +504,10 @@ public:
         if (total == 0) {
             return;
         }
-        self.parallel_for(size_type{0}, total,
-                          [&range, &fn](size_type index) { std::invoke(fn, range[index]); });
+        const auto first = std::ranges::begin(range);
+        self.parallel_for(size_type{0}, total, [first, &fn](size_type index) {
+            std::invoke(fn, first[static_cast<std::ranges::range_difference_t<Range>>(index)]);
+        });
     }
 
     // ----------------------------------------------------------- pool control

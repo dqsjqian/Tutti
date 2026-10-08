@@ -145,6 +145,10 @@ if(TUTTI_BUILD_TESTS)
     add_executable(tutti_tests tests/thread_pool_test.cpp)
     target_link_libraries(tutti_tests PRIVATE tutti::tutti)
     target_compile_options(tutti_tests PRIVATE ${TUTTI_WARNING_FLAGS})
+    target_compile_definitions(tutti_tests PRIVATE
+        TUTTI_EXPECTED_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
+        TUTTI_EXPECTED_VERSION_MINOR=${PROJECT_VERSION_MINOR}
+        TUTTI_EXPECTED_VERSION_PATCH=${PROJECT_VERSION_PATCH})
 
     add_test(NAME tutti_tests COMMAND tutti_tests)
 endif()
