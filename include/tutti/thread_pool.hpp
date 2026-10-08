@@ -438,7 +438,16 @@ public:
             return;
         }
 
-        const size_type total = static_cast<size_type>(last - first);
+        // Unsigned subtraction gives the full distance even when the signed
+        // endpoints straddle zero. Subtracting signed endpoints can overflow.
+        using unsigned_index = std::make_unsigned_t<
+            std::conditional_t<std::same_as<Index, bool>, unsigned char, Index>>;
+        const unsigned_index distance = static_cast<unsigned_index>(
+            static_cast<unsigned_index>(last) - static_cast<unsigned_index>(first));
+        const size_type total = static_cast<size_type>(distance);
+        if (static_cast<unsigned_index>(total) != distance) {
+            throw std::length_error("tutti::ThreadPool: index range exceeds size_type");
+        }
         size_type chunks = self.thread_count();
         if (chunks > total) {
             chunks = total;
@@ -446,7 +455,7 @@ public:
         if (chunks == 0) {
             chunks = 1;
         }
-        const size_type chunk = (total + chunks - 1) / chunks;
+        const size_type chunk = total / chunks + static_cast<size_type>(total % chunks != 0);
         // Every index is covered because chunks <= total, so the rounded-up
         // chunk size is at least one.
         TUTTI_ASSUME(chunk >= 1);
@@ -455,19 +464,17 @@ public:
         futures.reserve(chunks);
         std::exception_ptr failure;
         try {
-            for (size_type index = 0; index < chunks; ++index) {
-                const size_type offset = index * chunk;
-                if (offset >= total) {
-                    break;
-                }
+            for (size_type offset = 0; offset < total;) {
                 const size_type remaining = total - offset;
                 const size_type length = remaining < chunk ? remaining : chunk;
                 futures.push_back(self.submit([&fn, first, offset, length] {
                     for (size_type step = 0; step < length; ++step) {
                         std::invoke(fn,
-                                    static_cast<Index>(first + static_cast<Index>(offset + step)));
+                                    static_cast<Index>(static_cast<unsigned_index>(first) +
+                                                       static_cast<unsigned_index>(offset + step)));
                     }
                 }));
+                offset += length;
             }
         } catch (...) {
             // Accepted chunks borrow fn. Keep it alive until they finish even
@@ -583,8 +590,8 @@ public:
         work_cv_.notify_all();
     }
 
-    /// Blocks until every submitted task has finished. Tasks submitted by other
-    /// threads after this call are not waited for. Must not be called from
+    /// Blocks until the pool is idle. Concurrent submissions can extend the
+    /// wait; this is not a snapshot of previously submitted tasks. Must not be called from
     /// inside a task, and will not return while the pool is paused with pending
     /// work.
     void wait() {
@@ -592,7 +599,7 @@ public:
         idle_cv_.wait(lock, [this] { return outstanding_ == 0; });
     }
 
-    /// Blocks until every submitted task has finished, or until `timeout`
+    /// Blocks until the pool is idle, or until `timeout`
     /// elapses. Returns true when the pool became idle. Same restrictions as
     /// wait().
     template<class Rep, class Period>

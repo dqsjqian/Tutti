@@ -5,12 +5,14 @@
 
 #include <tutti/thread_pool.hpp>
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <expected>
 #include <format>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <numeric>
 #include <stdexcept>
@@ -474,6 +476,44 @@ void test_parallel_for_unsigned_range() {
     CHECK(std::accumulate(seen.begin(), seen.end(), 0u) == 10u);
 }
 
+void test_parallel_for_integer_boundaries() {
+    tutti::ThreadPool pool(3);
+    // Exercise the complete signed and unsigned distances without iterating
+    // billions of indices: each chunk throws on its first callback.
+    auto check_huge_range = [&pool](auto first, auto last) {
+        std::atomic<int> calls{0};
+        bool threw = false;
+        try {
+            pool.parallel_for(first, last, [&calls](auto) {
+                ++calls;
+                throw std::runtime_error("stop chunk");
+            });
+        } catch (const std::runtime_error&) {
+            threw = true;
+        }
+        CHECK(threw);
+        CHECK(calls == 3);
+    };
+    check_huge_range(std::numeric_limits<std::make_signed_t<tutti::size_type>>::min(),
+                     std::numeric_limits<std::make_signed_t<tutti::size_type>>::max());
+    check_huge_range(tutti::size_type{0}, std::numeric_limits<tutti::size_type>::max());
+
+    std::array<std::atomic<int>, 255> visits{};
+    pool.parallel_for(std::int8_t{-128}, std::int8_t{127}, [&](std::int8_t value) {
+        ++visits[static_cast<std::size_t>(static_cast<int>(value) + 128)];
+    });
+    for (const auto& count : visits) {
+        CHECK(count == 1);
+    }
+    std::atomic<int> booleans{0};
+    pool.parallel_for(false, true, [&booleans](bool value) {
+        if (!value) {
+            ++booleans;
+        }
+    });
+    CHECK(booleans == 1);
+}
+
 void test_parallel_for_each_iterator_range() {
     // A sized random-access range need not provide operator[].
     struct IteratorRange {
@@ -742,6 +782,7 @@ int main() {
     test_parallel_for_rethrows_first_exception();
     test_parallel_for_waits_after_submission_failure();
     test_parallel_for_unsigned_range();
+    test_parallel_for_integer_boundaries();
     test_parallel_for_each();
     test_parallel_for_each_iterator_range();
 

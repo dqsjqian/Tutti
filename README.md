@@ -187,6 +187,9 @@ Do not call `wait()`, `wait_for()`, `shutdown()` or `parallel_for()` from inside
 a task: the pool would be waiting for work that can only finish on the thread
 doing the waiting. Submitting from inside a task is fine.
 
+`wait()` and `wait_for()` observe the pool becoming idle. Concurrent submissions
+can extend the wait; these calls do not capture a snapshot of earlier work.
+
 ### Controlling the pool
 
 ```cpp
