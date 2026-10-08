@@ -485,8 +485,12 @@ void test_parallel_for_integer_boundaries() {
         bool threw = false;
         try {
             pool.parallel_for(first, last, [&calls](auto) {
-                ++calls;
-                throw std::runtime_error("stop chunk");
+                // Keep the throw dependent on runtime state: an unconditionally
+                // throwing callable makes MSVC flag the caller's loop increment
+                // as unreachable when it inlines this fixture.
+                if (calls.fetch_add(1) >= 0) {
+                    throw std::runtime_error("stop chunk");
+                }
             });
         } catch (const std::runtime_error&) {
             threw = true;
